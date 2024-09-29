@@ -30,120 +30,159 @@ accuracy and shed light on the "black-box" nature of prediction models.
 
 ## Usage
 
-**EPU-CNN**, to the best of our knowledge, is the first framework based on **Generalized Additive Models** for the construction of **Inherently
-Interpretable CNN models**, regardless of the base CNN architecture used and the application domain.
-Unlike current approaches, the models constructed by EPU-CNN enables interpretable classification based both
-on perceptual features and their spatial expression within an image; thus, it enables a more thorough and intuitive
-interpretation of the classification results.
+The **Explainable CAD Prediction Framework** is designed to provide transparent and interpretable machine learning models for diagnosing 
+CAD based on clinical and biometric data. This framework integrates **expert opinion** and **SHAP explainability techniques** 
+to offer both qualitative and quantitative insights into the decision-making process.
 
-EPU-CNN is capable of providing both **qualitative and quantitative classification interpretations**. An example of 
-image-specific interpretations provided by the EPU-CNN is shown below:
+### Key Features
+- **Expert-in-the-loop Predictions**: This framework incorporates expert judgments into the model's feature pool, improving accuracy and highlighting the impact of expert input on CAD diagnosis.
+- **Explainability**: SHAP values are used to illustrate the importance of individual features in the prediction process, providing transparency and interpretability for clinicians and researchers.
+- **Feature Selection Optimization**: Utilizing **Genetic Algorithms (GA)** and **Sequential Feature Selection (SFS)**, the framework selects the optimal subset of features to improve model performance.
+- **Comprehensive Performance Evaluation**: The framework supports the evaluation of five machine learning algorithms using **stratified 10-fold cross-validation**, ensuring robust assessment across multiple models.
 
-![Interpretation Example](assests/interpretation_example.png)
+### Example Interpretations
+The framework provides **qualitative interpretations** for each prediction, explaining how each feature contributes to the final diagnosis through SHAP value analysis. Below is an example of SHAP-based explanations for an individual patient:
 
-The quantitative interpretations on each image can be used to construct dataset level interpretations, which can be used
-to identify the most important perceptual features for the classification task. An example of such an interpretation is
-shown below:
+![Architecture Example](assets/model_architecture.png)
 
-![Dataset Interpretation Example](assests/dataset_interpretation_example.png)
+The **quantitative interpretations** can be used to construct dataset-level insights, identifying the most important clinical features for CAD diagnosis. Below are examples of SHAP waterfall plots for healthy and CAD patients:
 
-To use EPU-CNN, you need to provide a **base CNN architecture** and a **perceptual feature extractor**. In this repository
-we provide exemplary base CNN architectures and perceptual feature extractors used in our experimentations. An example of usage
-is shown below:
+![Dataset Interpretation Example Healthy](assets/waterfall_healthy.png)
+
+![Dataset Interpretation Example CAD](assets/waterfall_cad.png)
+
+### Contributions
+1. **Incorporating expert judgment**: The framework leverages the expert’s diagnostic input as a feature and compares the model’s performance with and without it.
+2. **Optimal feature selection**: Through GA and SFS methods, it identifies the most effective feature set to maximize diagnostic accuracy.
+3. **Performance benchmarking**: It evaluates five popular machine learning algorithms across various metrics to select the best-performing model.
+4. **Enhanced explainability**: SHAP values are employed to demystify the prediction process and validate the model against common CAD risk factors.
+
+The **Explainable CAD Prediction Framework** ensures transparency in medical decision-making by allowing clinicians to understand and trust the AI's reasoning process.
+
+An example of usage for EMERALD-CAD-ML is shown below:
 
 ```python
-from models.epu import EPUNet
-from models.subnetworks import Subnet
+from sklearn.ensemble import RandomForestClassifier
 
 # Initialize the EPU-CNN model
-epu = EPUNet(init_size=32, subnet_act="tanh", epu_act="sigmoid", 
-             subnet=Subnet, num_classes=1, num_pfms=4, 
-             fc_hidden_units=512)
+rndF = RandomForestClassifier(max_depth=None, random_state=0, n_estimators=80)
 ```
 
-The `subnet` defines the base CNN architecture. In our implementation `init_size` defines the number of 
-features in the first convolutional layers that is incremented  by a factor of **2** in each subsequent convolutional 
-block of the base CNN architecture. `hidden_units` defines the number of hidden units in the fully connected layers of
-the base CNN architecture. `num_pfms` defines the number of perceptual feature maps used as input for a particular 
-application.
-
-The `subnet_act` defines the output activation function of the base CNN architecture and the `epu_act` defines the inverse
-of the link function **g** used to provide the final output of the EPU-CNN model.
-
-Currently, the `EPUNet` class has an implementation of `get_pfm` method that can be used to extract the PFMs of 
-__green-red, blue-yellow, coarse-fine and light-dark__. The `get_pfm` takes as input a list of images (`np.ndarray`) and
-outputs a tuple of PFMs. In its current form, `EPUNet` takes as input for training and inference a `tuple` of PFMs where
-each position of the tuple is an `np.ndarray` of shape `(batch_size, height, width, 1)`.
+The `rndF` defines the initilization for the specific ML model used (in this case **Random Forest**). In our implementation
+`n_estimators` defines the number of estimators employed by the algorithm.
 
 ### Training
 
-An example of the training process is provided in the `train.py` script. The `train.py` script can be used to train an
-EPU-CNN model given a set of training images and target labels. The `train.py` script can be used as follows:
+An example of the training process is provided in the `ml_script.py` script. The `ml_script.py` script can be used to train an
+ML model given a set of training dataset. The `ml_script.py` script can be used as follows:
 
 ```python
-images_train, images_validation = ...
-labels_train, labels_validation = ...
-epu = EPUNet(init_size=32, subnet_act="tanh", epu_act="sigmoid", features_num=4,
-             subnet=Subnet, fc_hidden_units=512, classes=1)
-epu.set_name("example-model")
+data_path = 'path_to_csv'
+data = pd.read_csv(data_path)
+dataframe = pd.DataFrame(data.values, columns=data.columns)
+dataframe['CAD'] = data.CAD
+x = dataframe.drop(['ID','female','CNN_Healthy','CNN_CAD','Doctor: CAD','HEALTHY','CAD'], axis=1) # Whether to drop labels from the index (0 or ‘index’) or columns (1 or ‘columns’).
+x_nodoc = dataframe.drop(['ID','female','CNN_Healthy','CNN_CAD','Doctor: CAD', 'Doctor: Healthy','HEALTHY','CAD'], axis=1) # Whether to drop labels from the index (0 or ‘index’) or columns (1 or ‘columns’).
+y = dataframe['CAD'].astype(int)
 
-optimizer = ...
+sel_alg = rndF
 
-epu.compile(optimizer=optimizer, loss="binary_crossentropy", metrics=["accuracy"], run_eagerly=True)
-epu.fit(x=EPUNet.get_pfms(images_train, 128, 128), y=labels_train, epochs=1,
-        validation_data=(EPUNet.get_pfms(images_validation, 128, 128), labels_validation),
-        batch_size=1, callbacks=[])
+#############################################
+#### Genetic Algorithm Feature Selection ####
+#############################################
+for i in range (0,3):
+    print("run no ", i, ":")
+    selector = GeneticSelectionCV(
+        estimator=sel_alg,
+        cv=10,
+        verbose=2,
+        scoring="accuracy", 
+        max_features=26, #TODO change to 27 when testing with doctor, 26 without
+        caching=True,
+        n_jobs=1)
+    selector = selector.fit(x, y)
+    n_yhat = selector.predict(x)
+    sel_features = x.columns[selector.support_]
+    print("Genetic Feature Selection:", x.columns[selector.support_])
+    print("Genetic Accuracy Score: ", selector.score(x, y))
+    print("Testing Accuracy: ", metrics.accuracy_score(y, n_yhat))
+
+    ###############
+    #### CV-10 ####
+    ###############
+    for feature in x.columns:
+        if feature in sel_features:
+            pass
+        else:
+            X = X.drop(feature, axis=1)
+    
+    print("cv-10 accuracy: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).mean() * 100)
+
+sel_features = doc_rdnF_80_none
+
+##############
+### CV-10 ####
+##############
+for feature in x.columns:
+    if feature in sel_features:
+        pass
+    else:
+        X = X.drop(feature, axis=1)
+
+est = sel_alg.fit(X, y)
+n_yhat = est.predict(X)
+
+print("cv-10 accuracy: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).mean() * 100)
+print("cv-10 accuracy STD: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).std() * 100)
+print("f1_score: ", cross_val_score(sel_alg, X, y, scoring='f1', cv = 10).mean() * 100)
+print("f1_score STD: ", cross_val_score(sel_alg, X, y, scoring='f1', cv = 10).std() * 100)
+print("jaccard_score: ", cross_val_score(sel_alg, X, y, scoring='jaccard', cv = 10).mean() * 100)
+print("jaccard_score STD: ", cross_val_score(sel_alg, X, y, scoring='jaccard', cv = 10).std() * 100)
+scoring = {
+    'sensitivity': metrics.make_scorer(metrics.recall_score),
+    'specificity': metrics.make_scorer(metrics.recall_score,pos_label=0)
+}
+print("sensitivity: ", cross_val_score(sel_alg, X, y, scoring=scoring['sensitivity'], cv = 10).mean() * 100)
+print("sensitivity STD: ", cross_val_score(sel_alg, X, y, scoring=scoring['sensitivity'], cv = 10).std() * 100)
+print("specificity: ", cross_val_score(sel_alg, X, y, scoring=scoring['specificity'], cv = 10).mean() * 100)
+print("specificity STD: ", cross_val_score(sel_alg, X, y, scoring=scoring['specificity'], cv = 10).std() * 100)
 ```
 
-It is recomended to save the trained model using either the `save_model` function or save the weights using the `np.save`
-function. For example. 
+It is recomended to save the trained model and subset using either the `dump` function. For example:
 
 ```python
-epu.save_model("example-model")
-# or
-np.save("example-model-weights", epu.get_weights())
+joblib.dump(est, f'{sel_alg}_model.joblib')
 ```
 
 ### Interpretations
 
-Currently `EPUNet` provides its interpretations using the `get_interpretation` and `get_prm` methods. The 
-`get_interpretation` returns the qunatitative contributions of each **PFM** used whereas `get_prm` returns the
-spatial expression of each **PFM** used on the image. To get the exact results with the paper the `get_prm` results need 
-to be propagated to the `refine_prm` method of the `EPUNet` class.
-
-To work, call after the loading of the model or the weights to the initialized object of epu don't use the `.predict` method
-but call the model as `epu(...)` on a PFM tensor instead.
+An example of the training process is provided in the `ml_xai.py` script. The `ml_xai.py` script can be used to explain
+the model stored by the `ml_script.py` script. The `ml_script.py` script can be used as follows:
 
 ```python
-images = ...
-epu = EPUNet(init_size=32, subnet_act="tanh", epu_act="sigmoid", features_num=4,
-            subnet=Subnet, fc_hidden_units=512, classes=1)
-epu.load_model("example-model")
-epu(EPUNet.get_pfm(images[0], 128, 128))
+# best performing subset
+doc_rdnF_80_none = ['known CAD', 'previous PCI', 'Diabetes', 'Chronic Kindey Disease', 'ANGINA LIKE', 'RST ECG', 'male', '<40', 'Doctor: Healthy'] # rndF 84,41% -> cv-10: 83,02%
 
-# Get Relevance Similarity Scores 
-rss = epu.get_interpret_output()
+sel_features = doc_rdnF_80_none
+for feature in x.columns:
+    if feature in sel_features:
+        pass    
+    else:
+        X = X.drop(feature, axis=1)
 
-# Get Perceptual Relevance Maps
-prms = epu.refine_prm(epu.get_prm())
+est = sel_alg.fit(X, y)
+n_yhat = cross_val_predict(est, X, y, cv=10)
+print("Testing Accuracy: {a:5.2f}%".format(a = 100*metrics.accuracy_score(y, n_yhat)))
+
+print("###### SHAP ######")
+# print('Number of features %d' % len(est.feature_names_in_))
+effect_sizes = cohen_effect_size(X, y)
+effect_sizes.reindex(effect_sizes.abs().sort_values(ascending=False).nlargest(40).index)[::-1].plot.barh(figsize=(6, 10))
+plt.title('Features with the largest effect sizes')
+plt.show()
+
+xai(est, X, 0)
 ```
-
-## Datasets
-
-The datasets below have been used for training and evaluating the EPU-CNN models.
-
-* [Banapple](https://github.com/innoisys/Banapple)
-* [KID Dataset](https://mdss.uth.gr/datasets/endoscopy/kid/)
-* [Kvasir](https://datasets.simula.no/kvasir/)
-* [ISIC-2019](https://challenge2019.isic-archive.com/)
-* [CIFAR-10](http://www.cs.toronto.edu/~kriz/cifar.html)
-* [MNIST](http://yann.lecun.com/exdb/mnist/)
-* [Fashion-MNIST](https://github.com/zalandoresearch/fashion-mnist)
-* [iBeans](https://github.com/AI-Lab-Makerere/ibean/)
-
-The **Banapple**, **KID Dataset**, **Kvasir** and **ISIC-2019** have been downloaded from their respective sources and 
-have been curated manually for the training and evaluation of EPU-CNN models. The **CIFAR-10**, **MNIST**, 
-**Fashion-MNIST** and **iBeans** datasets have been used via the [Tensorflow Datasets API](https://www.tensorflow.org/datasets). 
 
 ## Citation
 If you find this work useful, please cite our papers:

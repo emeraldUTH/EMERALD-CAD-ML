@@ -1,16 +1,7 @@
-from array import array
-from enum import auto
 from re import sub
 from turtle import backward
-import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
-from sklearn import preprocessing
 from sklearn import metrics
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_val_predict
-from sklearn.model_selection import cross_validate
 from sklearn.model_selection import cross_val_score
 from sklearn import metrics
 from sklearn import svm
@@ -24,10 +15,7 @@ from tabpfn import TabPFNClassifier
 import xgboost
 from sklearn import tree
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-import itertools
-import sys
-import multiprocessing
-from tqdm import tqdm #tqmd progress bar
+import joblib
 
 from genetic_selection import GeneticSelectionCV
 from sklearn.tree import DecisionTreeClassifier
@@ -53,22 +41,31 @@ def perf_measure(y_actual, y_hat):
 
 data_path = 'path_to_csv'
 data = pd.read_csv(data_path)
-print(data.columns)
-print(data.values)
 dataframe = pd.DataFrame(data.values, columns=data.columns)
 dataframe['CAD'] = data.CAD
 x = dataframe.drop(['ID','female','CNN_Healthy','CNN_CAD','Doctor: CAD','HEALTHY','CAD'], axis=1) # Whether to drop labels from the index (0 or ‘index’) or columns (1 or ‘columns’).
 x_nodoc = dataframe.drop(['ID','female','CNN_Healthy','CNN_CAD','Doctor: CAD', 'Doctor: Healthy','HEALTHY','CAD'], axis=1) # Whether to drop labels from the index (0 or ‘index’) or columns (1 or ‘columns’).
-print("x:\n",x.columns)
 y = dataframe['CAD'].astype(int)
 
 # ml algorithms initialization
 svm = svm.SVC(kernel='rbf')
+lr = linear_model.LinearRegression()
+dt = DecisionTreeClassifier()
+rndF = RandomForestClassifier(max_depth=None, random_state=0, n_estimators=80)
+ada = AdaBoostClassifier(n_estimators=150, random_state=0)
+knn = KNeighborsClassifier(n_neighbors=20) #TODO n_neighbors=13 when testing with doctor, 20 w/o doctor
+tab = TabPFNClassifier(device='cpu', N_ensemble_configurations=26)
+xgb = xgboost.XGBRegressor(objective="binary:hinge", random_state=42) # 68,48%
+light = LGBMClassifier(objective='binary', random_state=5, n_estimators=80, n_jobs=-1) # 72,16% / 80 -> 78,291
+catb = CatBoostClassifier(n_estimators=79, learning_rate=0.1, verbose=False)
+
+# best performing subset
+doc_rdnF_80_none = ['known CAD', 'previous PCI', 'Diabetes', 'Chronic Kindey Disease', 'ANGINA LIKE', 'RST ECG', 'male', '<40', 'Doctor: Healthy'] # rndF 84,41% -> cv-10: 83,02%
 
 # doc/no_doc parameterization
-sel_alg = svm
-x = x_nodoc #TODO comment when not testing with doctor
-X = x_nodoc
+sel_alg = rndF
+# x = x_nodoc #TODO comment when not testing with doctor
+# X = x_nodoc
 
 #############################################
 #### Genetic Algorithm Feature Selection ####
@@ -93,7 +90,6 @@ for i in range (0,3):
     ###############
     #### CV-10 ####
     ###############
-    x = x_nodoc
     for feature in x.columns:
         if feature in sel_features:
             pass
@@ -102,7 +98,7 @@ for i in range (0,3):
     
     print("cv-10 accuracy: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).mean() * 100)
 
-sel_features = x_nodoc
+sel_features = doc_rdnF_80_none
 
 ##############
 ### CV-10 ####
@@ -115,6 +111,9 @@ for feature in x.columns:
 
 est = sel_alg.fit(X, y)
 n_yhat = est.predict(X)
+
+# Save the trained model to a file
+joblib.dump(est, f'{sel_alg}_model.joblib')
 
 print("cv-10 accuracy: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).mean() * 100)
 print("cv-10 accuracy STD: ", cross_val_score(sel_alg, X, y, scoring='accuracy', cv = 10).std() * 100)

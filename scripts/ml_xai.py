@@ -1,6 +1,3 @@
-from array import array
-from enum import auto
-from re import sub
 from turtle import backward
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,8 +13,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from catboost import CatBoostClassifier
-from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-from genetic_selection import GeneticSelectionCV
 from sklearn.tree import DecisionTreeClassifier
 from tabpfn import TabPFNClassifier
 import shap
@@ -76,19 +71,34 @@ def shapley_feature_ranking(shap_values, X):
     )
 
 # function to print SHAP values and plots
-def xai_svm(model, X, idx):
-    explainer = shap.KernelExplainer(model.predict, X.values[idx])
+# function to print SHAP values and plots
+def xai(model, X, val):
+    explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
-    idx = 2 # datapoint to explain
-    sv = explainer.shap_values(X.loc[[idx_healthy]])
-    exp = shap.Explanation(sv,explainer.expected_value, data=X.loc[[idx_healthy]].values, feature_names=X.columns)
-    shap.waterfall_plot(exp[0])
-    shap.summary_plot(shap_values, X)
-    shap_rank = shapley_feature_ranking(shap_values, X)
+    ###
+    sv = explainer(X)
+    exp = shap.Explanation(sv[:,:,1], sv.base_values[:,1], X, feature_names=X.columns)
+    idx_healthy = 2 # datapoint to explain (healthy)
+    idx_cad = 9 # datapoint to explain (CAD)
+    shap.waterfall_plot(exp[idx_healthy])
+    shap.waterfall_plot(exp[idx_cad])
+    ###
+
+    shap.summary_plot(shap_values[val], X)
+    # shap.summary_plot(shap_values[0], X, plot_type="bar")
+    shap.summary_plot(shap_values[0], X, plot_type='violin')
+    for feature in X.columns:
+        print(feature)
+        shap.dependence_plot(feature, shap_values[0], X)
+    shap.force_plot(explainer.expected_value[0], shap_values[0][0], X.iloc[0,:], matplotlib=True)
+    shap.force_plot(explainer.expected_value[1], shap_values[0][0], X.iloc[0,:], matplotlib=True)
+
+    ###
+    shap_rank = shapley_feature_ranking(shap_values[0], X)
     shap_rank.sort_values(by="importance", ascending=False)
     print(shap_rank)
 
-data = pd.read_csv('/d/Σημειώσεις/PhD - EMERALD/1. CAD/src/cad_dset.csv')
+data = pd.read_csv('CAD/src/cad_dset.csv')
 dataframe = pd.DataFrame(data.values, columns=data.columns)
 dataframe['CAD'] = data.CAD
 x = dataframe.drop(['ID','female','CNN_Healthy','CNN_CAD','Doctor: CAD','HEALTHY','CAD'], axis=1) # Whether to drop labels from the index (0 or ‘index’) or columns (1 or ‘columns’).
@@ -97,6 +107,13 @@ y = dataframe['CAD'].astype(int)
 
 # ml algorithms initialization
 svm = svm.SVC(kernel='rbf')
+lr = linear_model.LinearRegression()
+dt = DecisionTreeClassifier()
+rndF = RandomForestClassifier(max_depth=None, random_state=0, n_estimators=80)
+ada = AdaBoostClassifier(n_estimators=150, random_state=0)
+knn = KNeighborsClassifier(n_neighbors=20) #TODO n_neighbors=13 when testing with doctor, 20 w/o doctor
+tab = TabPFNClassifier(device='cpu', N_ensemble_configurations=26)
+catb = CatBoostClassifier(n_estimators=79, learning_rate=0.1, verbose=False)
 
 
 x = x_nodoc #TODO ucommment when running w/o doctor
@@ -104,6 +121,11 @@ X = x
 # sel_features = no_doc_catb #TODO here input the array with the feature names
 sel_alg = svm
 
+
+# best performing subset
+doc_rdnF_80_none = ['known CAD', 'previous PCI', 'Diabetes', 'Chronic Kindey Disease', 'ANGINA LIKE', 'RST ECG', 'male', '<40', 'Doctor: Healthy'] # rndF 84,41% -> cv-10: 83,02%
+
+sel_features = doc_rdnF_80_none
 for feature in x.columns:
     if feature in sel_features:
         pass    
@@ -130,4 +152,4 @@ effect_sizes.reindex(effect_sizes.abs().sort_values(ascending=False).nlargest(40
 plt.title('Features with the largest effect sizes')
 plt.show()
 
-xai_svm(est, X, X.index)
+xai(est, X, 0)
