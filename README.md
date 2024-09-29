@@ -157,7 +157,7 @@ joblib.dump(est, f'{sel_alg}_model.joblib')
 ### Interpretations
 
 An example of the training process is provided in the `ml_xai.py` script. The `ml_xai.py` script can be used to explain
-the model stored by the `ml_script.py` script. The `ml_script.py` script can be used as follows:
+the model stored by the `ml_script.py` script. The `ml_xai.py` script can be used as follows:
 
 ```python
 # best performing subset
