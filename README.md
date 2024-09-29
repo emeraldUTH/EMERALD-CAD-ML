@@ -64,7 +64,7 @@ An example of usage for EMERALD-CAD-ML is shown below:
 ```python
 from sklearn.ensemble import RandomForestClassifier
 
-# Initialize the EPU-CNN model
+# Initialize the model
 rndF = RandomForestClassifier(max_depth=None, random_state=0, n_estimators=80)
 ```
 
